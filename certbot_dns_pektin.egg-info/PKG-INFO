@@ -1,0 +1,15 @@
+Metadata-Version: 2.1
+Name: certbot-dns-pektin
+Version: 0.1.0
+Summary: Pektin DNS Authenticator plugin for Certbot
+Home-page: https://git.y.gy/pektin/certbot-plugin
+Author: Max von Forell
+Author-email: max@vonforell.de
+License: Apache License 2.0
+Platform: UNKNOWN
+Requires-Python: >=3.6
+Provides-Extra: docs
+License-File: LICENSE
+
+UNKNOWN
+

@@ -1,0 +1,3 @@
+[certbot.plugins]
+dns-pektin = certbot_dns_pektin._internal.dns_pektin:Authenticator
+
