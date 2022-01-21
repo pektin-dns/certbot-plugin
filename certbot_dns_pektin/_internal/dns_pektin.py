@@ -33,15 +33,17 @@ class Authenticator(dns_common.DNSAuthenticator):
         self.credentials = self._configure_credentials(
             'credentials',
             'Pektin credentials INI file',
-            {'username': 'The credentials file must contain a username.',
-            'password': 'The credentials file must contain a password.',
-            'vaultEndpoint': 'The credentials file must contain the vault endpoint.'},
+            {
+                'username': 'The credentials file must contain a username.',
+                'confidantPassword': 'The credentials file must contain a confidantPassword.',
+                'apiEndpoint':'The credentials file must contain the vault endpoint.'
+            },
             None
         )
         username = self.credentials.conf('username')
-        password = self.credentials.conf('password')
-        vaultEndpoint = self.credentials.conf('vaultEndpoint')
-        self._pektin_client = _PektinClient(username, password, vaultEndpoint)
+        confidantPassword = self.credentials.conf('confidantPassword')
+        pektinApiEndpoint = self.credentials.conf('pektinApiEndpoint')
+        self._pektin_client = _PektinClient(username, confidantPassword, pektinApiEndpoint)
 
     def _perform(self, domain, validation_name, validation):
         self._pektin_client.add_txt_record(
@@ -57,52 +59,11 @@ class _PektinClient:
     Encapsulates all communication with the Pektin API.
     """
 
-    def __init__(self, username, password, vault_endpoint):
-        logger.debug('Obtaining token from vault...')
-        vault_login_uri = f'{vault_endpoint}/v1/auth/userpass/login/{username}'
-        r = requests.post(vault_login_uri, data={'password': password})
-        if r.status_code != 200:
-            raise errors.PluginError('Error obtaining token from vault.')
-        json = r.json()
-        if not 'auth' in json:
-            raise errors.PluginError('JSON response from vault is invalid (no auth field).')
-        elif not 'client_token' in json['auth']:
-            raise errors.PluginError('JSON response from vault is invalid (no auth.client_token field).')
-        self.vault_token = json['auth']['client_token']
-        logger.debug('Successfully obtained token from vault.')
-
-        logger.debug('Obtaining Pektin config from vault...')
-        vault_config_uri = f'{vault_endpoint}/v1/pektin-kv/data/pektin-config'
-        r = requests.get(vault_config_uri, headers={'X-Vault-Token': self.vault_token})
-        if r.status_code != 200:
-            raise errors.PluginError('Error obtaining Pektin config from vault.')
-        json = r.json()
-        if not 'data' in json:
-            raise errors.PluginError('JSON response from vault is invalid (no data field).')
-        elif not 'data' in json['data']:
-            raise errors.PluginError('JSON response from vault is invalid (no data.data field).')
-        pektin_config = json['data']['data']
-        if not 'domain' in pektin_config:
-            raise errors.PluginError('JSON response from vault is invalid (no data field).')
-        elif not 'apiSubDomain' in pektin_config:
-            raise errors.PluginError('JSON response from vault is invalid (no data.data field).')
-        # TODO
-        # self.pektin_api_uri = f'http://{pektin_config["apiSubDomain"]}.{pektin_config["domain"]}'
-        self.pektin_api_uri = 'http://65.108.88.212:3001'
-        logger.debug('Successfully obtained Pektin config from vault.')
-
-        logger.debug('Obtaining Pektin API token from vault...')
-        vault_token_uri = f'{vault_endpoint}/v1/pektin-kv/data/gss_token'
-        r = requests.get(vault_token_uri, headers={'X-Vault-Token': self.vault_token})
-        if r.status_code != 200:
-            raise errors.PluginError('Error obtaining Pektin API token from vault.')
-        json = r.json()
-        if not 'data' in json:
-            raise errors.PluginError('JSON response from vault is invalid (no data field).')
-        elif not 'data' in json['data']:
-            raise errors.PluginError('JSON response from vault is invalid (no data.data field).')
-        self.pektin_api_token = json['data']['data']['token']
-        logger.debug('Successfully obtained Pektin API token from vault.')
+    def __init__(self, username, confidantPassword, pektinApiEndpoint):
+        self.username=username
+        self.confidantPassword=confidantPassword
+        self.pektinApiEndpoint=pektinApiEndpoint
+        
 
     def add_txt_record(self, domain, record_name, record_content, record_ttl):
         """
@@ -115,12 +76,11 @@ class _PektinClient:
         """
 
         logger.debug(f'Attempting to add record to domain {domain}: {record_name}')
-        uri = f'{self.pektin_api_uri}/set'
+        uri = f'{self.pektinApiEndpoint}/set'
         logger.debug(record_content)
-        txt = {'txt_data': [[b for b in record_content.encode("utf-8")]]}
-        rr_set = [{'ttl': record_ttl, 'value': {'TXT': txt}}]
+        rr_set = [{'ttl': record_ttl, 'value': {'TXT': record_content}}]
         redis_entries = [{'name': f'{record_name}.:TXT', 'rr_set': rr_set}]
-        data = json_dumps({'token': self.pektin_api_token, 'records': redis_entries})
+        data = json_dumps({'username':self.username'confidantPassword': self.confidantPassword, 'records': redis_entries})
         logger.debug(data)
         headers = {'content-type': 'application/json'}
         r = requests.post(uri, data=data, headers=headers)
@@ -146,9 +106,9 @@ class _PektinClient:
         """
 
         logger.debug(f'Deleting record from domain {domain}.')
-        uri = f'{self.pektin_api_uri}/delete'
+        uri = f'{self.pektinApiEndpoint}/delete'
         key = f'{record_name}.:TXT'
-        data = json_dumps({'token': self.pektin_api_token, 'keys': [key]})
+        data = json_dumps({username:self.confidantPassword'confidantPassword': self.confidantPassword, 'keys': [key]})
         headers = {'content-type': 'application/json'}
         r = requests.post(uri, data=data, headers=headers)
         if r.status_code != 200:
