@@ -35,14 +35,14 @@ class Authenticator(dns_common.DNSAuthenticator):
             'Pektin credentials INI file',
             {
                 'username': 'The credentials file must contain a username.',
-                'confidantPassword': 'The credentials file must contain a confidantPassword.',
-                'apiEndpoint':'The credentials file must contain the vault endpoint.'
+                'confidant_password': 'The credentials file must contain a confidantPassword.',
+                'api_endpoint':'The credentials file must contain the vault endpoint.'
             },
             None
         )
         username = self.credentials.conf('username')
-        confidantPassword = self.credentials.conf('confidantPassword')
-        pektinApiEndpoint = self.credentials.conf('pektinApiEndpoint')
+        confidantPassword = self.credentials.conf('confidant_password')
+        pektinApiEndpoint = self.credentials.conf('api_endpoint')
         self._pektin_client = _PektinClient(username, confidantPassword, pektinApiEndpoint)
 
     def _perform(self, domain, validation_name, validation):
@@ -78,9 +78,10 @@ class _PektinClient:
         logger.debug(f'Attempting to add record to domain {domain}: {record_name}')
         uri = f'{self.pektinApiEndpoint}/set'
         logger.debug(record_content)
-        rr_set = [{'ttl': record_ttl, 'value': {'TXT': record_content}}]
-        redis_entries = [{'name': f'{record_name}.:TXT', 'rr_set': rr_set}]
-        data = json_dumps({'username':self.username'confidantPassword': self.confidantPassword, 'records': redis_entries})
+        rr_set = [{'ttl': record_ttl, 'value': record_content}]
+        record_name = record_name if record_name.endswith('.') else f'{record_name}.'
+        records = [{'name': record_name, 'rr_set': rr_set, 'rr_type': 'TXT'}]
+        data = json_dumps({'client_username': self.username, 'confidant_password': self.confidantPassword, 'records': records})
         logger.debug(data)
         headers = {'content-type': 'application/json'}
         r = requests.post(uri, data=data, headers=headers)
@@ -88,9 +89,9 @@ class _PektinClient:
         if r.status_code != 200:
             raise errors.PluginError(f'Error setting record: {r.status_code} {r.text}')
         json = r.json()
-        if not 'error' in json:
-            raise errors.PluginError('JSON response from Pektin API is invalid (no error field).')
-        if json['error']:
+        if not 'type' in json:
+            raise errors.PluginError('JSON response from Pektin API is invalid (no type field).')
+        if json['type'] != 'success':
             raise errors.PluginError(f'Pektin API response indicates an error: {json.get("message")}')
         logger.debug('Successfully added record.')
 
@@ -107,8 +108,9 @@ class _PektinClient:
 
         logger.debug(f'Deleting record from domain {domain}.')
         uri = f'{self.pektinApiEndpoint}/delete'
-        key = f'{record_name}.:TXT'
-        data = json_dumps({username:self.confidantPassword'confidantPassword': self.confidantPassword, 'keys': [key]})
+        record_name = record_name if record_name.endswith('.') else f'{record_name}.'
+        key = {'name': record_name, 'rr_type': 'TXT'}
+        data = json_dumps({'client_username': self.username, 'confidant_password': self.confidantPassword, 'records': [key]})
         headers = {'content-type': 'application/json'}
         r = requests.post(uri, data=data, headers=headers)
         if r.status_code != 200:
