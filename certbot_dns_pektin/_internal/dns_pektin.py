@@ -63,6 +63,7 @@ class _PektinClient:
         self.username=username
         self.confidantPassword=confidantPassword
         self.pektinApiEndpoint=pektinApiEndpoint
+        self.domain_rr_sets = {}
         
 
     def add_txt_record(self, domain, record_name, record_content, record_ttl):
@@ -78,9 +79,13 @@ class _PektinClient:
         logger.debug(f'Attempting to add record to domain {domain}: {record_name}')
         uri = f'{self.pektinApiEndpoint}/set'
         logger.debug(record_content)
-        rr_set = [{ 'value': record_content}]
+
+        if not domain in self.domain_rr_sets:
+            self.domain_rr_sets[domain] = []
+        self.domain_rr_sets[domain] += [{ 'value': record_content}]
+
         record_name = record_name if record_name.endswith('.') else f'{record_name}.'
-        records = [{'name': record_name,'ttl': record_ttl, 'rr_set': rr_set, 'rr_type': 'TXT'}]
+        records = [{'name': record_name, 'ttl': record_ttl, 'rr_set': self.domain_rr_sets[domain], 'rr_type': 'TXT'}]
         data = json_dumps({'client_username': self.username, 'confidant_password': self.confidantPassword, 'records': records})
         logger.debug(data)
         headers = {'content-type': 'application/json'}
