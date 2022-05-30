@@ -43,7 +43,8 @@ class Authenticator(dns_common.DNSAuthenticator):
         username = self.credentials.conf('username')
         confidantPassword = self.credentials.conf('confidant_password')
         pektinApiEndpoint = self.credentials.conf('api_endpoint')
-        self._pektin_client = _PektinClient(username, confidantPassword, pektinApiEndpoint)
+        perimeterAuth =  self.credentials.conf('perimeter_auth')
+        self._pektin_client = _PektinClient(username, confidantPassword, pektinApiEndpoint,perimeterAuth)
 
     def _perform(self, domain, validation_name, validation):
         self._pektin_client.add_txt_record(
@@ -59,10 +60,11 @@ class _PektinClient:
     Encapsulates all communication with the Pektin API.
     """
 
-    def __init__(self, username, confidantPassword, pektinApiEndpoint):
+    def __init__(self, username, confidantPassword, pektinApiEndpoint,perimeterAuth):
         self.username=username
         self.confidantPassword=confidantPassword
         self.pektinApiEndpoint=pektinApiEndpoint
+        self.perimeterAuth=perimeterAuth
         self.domain_rr_sets = {}
         
 
@@ -88,7 +90,7 @@ class _PektinClient:
         records = [{'name': record_name, 'ttl': record_ttl, 'rr_set': self.domain_rr_sets[domain], 'rr_type': 'TXT'}]
         data = json_dumps({'client_username': self.username, 'confidant_password': self.confidantPassword, 'records': records})
         logger.debug(data)
-        headers = {'content-type': 'application/json'}
+        headers = {'content-type': 'application/json', 'Authorization': self.perimeterAuth}
         r = requests.post(uri, data=data, headers=headers)
 
         if r.status_code != 200:
@@ -116,7 +118,7 @@ class _PektinClient:
         record_name = record_name if record_name.endswith('.') else f'{record_name}.'
         key = {'name': record_name, 'rr_type': 'TXT'}
         data = json_dumps({'client_username': self.username, 'confidant_password': self.confidantPassword, 'records': [key]})
-        headers = {'content-type': 'application/json'}
+        headers = {'content-type': 'application/json', 'Authorization': self.perimeterAuth}
         r = requests.post(uri, data=data, headers=headers)
         if r.status_code != 200:
             logger.warning(f'Could not delete record: {r.status_code} {r.text}')
